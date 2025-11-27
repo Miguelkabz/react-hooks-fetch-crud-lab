@@ -1,58 +1,119 @@
 import React, { useState, useEffect } from "react";
-import QuestionList from "./QuestionList";
-import QuestionForm from "./QuestionForm";
 
 function App() {
   const [questions, setQuestions] = useState([]);
-  const [showQuestions, setShowQuestions] = useState(true); // default to showing questions
+  const [showForm, setShowForm] = useState(false);
+  const [newPrompt, setNewPrompt] = useState("");
+  const [newAnswer, setNewAnswer] = useState("0");
 
-  // Fetch questions on mount
+  // Fetch existing questions on mount
   useEffect(() => {
-    fetch("http://localhost:4000/questions")
-      .then((res) => res.json())
-      .then((data) => setQuestions(data))
-      .catch((err) => console.error(err));
+    const fetchQuestions = async () => {
+      try {
+        const res = await fetch("http://localhost:3001/questions");
+        const data = await res.json();
+        setQuestions(data);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    fetchQuestions();
   }, []);
 
-  // Delete question
-  function handleDelete(id) {
-    fetch(`http://localhost:4000/questions/${id}`, { method: "DELETE" })
-      .then(() => setQuestions(questions.filter((q) => q.id !== id)))
-      .catch(console.error);
-  }
+  // Add a new question
+  const addQuestion = async () => {
+    const payload = { prompt: newPrompt, answer: newAnswer };
+    try {
+      const res = await fetch("http://localhost:3001/questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      // Functional update avoids stale closures
+      setQuestions((prev) => [...prev, data]);
+      setShowForm(false);
+      setNewPrompt("");
+      setNewAnswer("0");
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-  // Update question (correct answer change)
-  function handleUpdate(updatedQ) {
-    fetch(`http://localhost:4000/questions/${updatedQ.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedQ),
-    })
-      .then((res) => res.json())
-      .then((data) =>
-        setQuestions(questions.map((q) => (q.id === data.id ? data : q)))
-      )
-      .catch(console.error);
-  }
+  // Delete a question
+  const deleteQuestion = async (id) => {
+    try {
+      await fetch(`http://localhost:3001/questions/${id}`, { method: "DELETE" });
+      setQuestions((prev) => prev.filter((q) => q.id !== id));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // Update answer
+  const updateAnswer = (id, value) => {
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, answer: value } : q))
+    );
+  };
 
   return (
-    <div className="App">
-      <nav>
-        <button onClick={() => setShowQuestions(false)}>New Question</button>
-        <button onClick={() => setShowQuestions(true)}>View Questions</button>
-      </nav>
+    <div>
+      <div>
+        <button onClick={() => setShowForm(false)}>View Questions</button>
+        <button onClick={() => setShowForm(true)}>New Question</button>
+      </div>
 
-      <main>
-        {showQuestions ? (
-          <QuestionList
-            questions={questions}
-            onDelete={handleDelete}
-            onUpdate={handleUpdate}
-          />
-        ) : (
-          <QuestionForm setQuestions={setQuestions} />
-        )}
-      </main>
+      {showForm ? (
+        <div>
+          <h2>Add New Question</h2>
+          <label>
+            Prompt
+            <input
+              value={newPrompt}
+              onChange={(e) => setNewPrompt(e.target.value)}
+              aria-label="Prompt"
+            />
+          </label>
+          <label>
+            Correct Answer
+            <select
+              value={newAnswer}
+              onChange={(e) => setNewAnswer(e.target.value)}
+              aria-label="Correct Answer"
+            >
+              <option value="0">A</option>
+              <option value="1">B</option>
+              <option value="2">C</option>
+              <option value="3">D</option>
+            </select>
+          </label>
+          <button onClick={addQuestion}>Add Question</button>
+        </div>
+      ) : (
+        <div>
+          <h2>Questions</h2>
+          {questions.map((q) => (
+            <div key={q.id}>
+              <p>{q.prompt}</p>
+              <label>
+                Correct Answer
+                <select
+                  value={q.answer}
+                  onChange={(e) => updateAnswer(q.id, e.target.value)}
+                  aria-label="Correct Answer"
+                >
+                  <option value="0">A</option>
+                  <option value="1">B</option>
+                  <option value="2">C</option>
+                  <option value="3">D</option>
+                </select>
+              </label>
+              <button onClick={() => deleteQuestion(q.id)}>Delete Question</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

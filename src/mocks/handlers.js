@@ -6,7 +6,7 @@ let questions = [
   { id: 2, prompt: 'lorem testum 2', answers: ['A', 'B', 'C', 'D'], correctIndex: 1 },
 ];
 
-const bases = ['/questions', 'http://localhost:4000/questions'];
+const bases = ['/questions', 'http://localhost:3001/questions'];
 
 export const handlers = bases.flatMap((base) => [
   rest.get(base, (req, res, ctx) => {

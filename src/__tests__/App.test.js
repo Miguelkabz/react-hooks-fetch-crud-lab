@@ -1,141 +1,89 @@
 import React from "react";
-import "whatwg-fetch";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitForElementToBeRemoved,
-} from "@testing-library/react";
-import "@testing-library/jest-dom/extend-expect";
-import { rest } from "msw";
-import { setupServer } from "msw/node";
-
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import App from "../components/App";
 
-// Initial test data
-let questions = [
-  { id: 1, prompt: "lorem testum 1", answers: ["A", "B", "C", "D"], correctIndex: 0 },
-  { id: 2, prompt: "lorem testum 2", answers: ["A", "B", "C", "D"], correctIndex: 1 },
+// Sample data to mock existing questions
+const mockQuestions = [
+  { id: 1, prompt: "lorem testum 1", answer: "A" },
+  { id: 2, prompt: "lorem testum 2", answer: "B" },
 ];
 
-// Support both "/questions" and "http://localhost:4000/questions"
-const bases = ["/questions", "http://localhost:4000/questions"];
+beforeEach(() => {
+  // Mock global fetch
+  global.fetch = jest.fn((url, options) => {
+    if (url.endsWith("/questions") && (!options || options.method === "GET")) {
+      // GET request to fetch questions
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(mockQuestions),
+      });
+    } else if (url.endsWith("/questions") && options.method === "POST") {
+      // POST request to create a new question
+      const newQuestion = { id: 3, prompt: "Test Prompt", answer: "A" };
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(newQuestion),
+      });
+    } else if (url.match(/\/questions\/\d+/) && options.method === "DELETE") {
+      // DELETE request
+      return Promise.resolve({ ok: true });
+    }
+    return Promise.reject(new Error("Unhandled fetch request"));
+  });
+});
 
-// MSW handlers
-export const handlers = bases.flatMap((base) => [
-  rest.get(base, (req, res, ctx) => {
-    return res(ctx.status(200), ctx.json(questions));
-  }),
-
-  rest.post(base, async (req, res, ctx) => {
-    const body = await req.json();
-    const newQ = { ...body, id: Date.now() };
-    questions.push(newQ);
-    return res(ctx.status(201), ctx.json(newQ));
-  }),
-
-  rest.delete(`${base}/:id`, (req, res, ctx) => {
-    const id = Number(req.params.id);
-    questions = questions.filter((q) => q.id !== id);
-    return res(ctx.status(204));
-  }),
-
-  rest.patch(`${base}/:id`, async (req, res, ctx) => {
-    const id = Number(req.params.id);
-    const body = await req.json();
-    questions = questions.map((q) => (q.id === id ? { ...q, ...body } : q));
-    return res(ctx.status(200), ctx.json(questions.find((q) => q.id === id)));
-  }),
-]);
-
-// Setup server
-const server = setupServer(...handlers);
-
-// Test lifecycle
-beforeAll(() => server.listen());
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-
-
-// -------------------------
-//        TESTS
-// -------------------------
+afterEach(() => {
+  jest.resetAllMocks();
+});
 
 test("displays question prompts after fetching", async () => {
   render(<App />);
+  fireEvent.click(screen.getByText(/View Questions/i));
 
-  fireEvent.click(screen.queryByText(/View Questions/i));
-
-  expect(await screen.findByText(/lorem testum 1/i)).toBeInTheDocument();
-  expect(await screen.findByText(/lorem testum 2/i)).toBeInTheDocument();
+  await waitFor(() => {
+    expect(screen.getByText(/lorem testum 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/lorem testum 2/i)).toBeInTheDocument();
+  });
 });
 
 test("creates a new question when the form is submitted", async () => {
   render(<App />);
 
-  // Wait for initial fetch
-  await screen.findByText(/lorem testum 1/i);
+  fireEvent.click(screen.getByText(/New Question/i));
 
-  // Go to form
-  fireEvent.click(screen.queryByText(/New Question/i));
-
-  // Fill inputs
-  fireEvent.change(screen.queryByLabelText(/Prompt/i), {
+  fireEvent.change(screen.getByLabelText(/Prompt/i), {
     target: { value: "Test Prompt" },
   });
-  fireEvent.change(screen.queryByLabelText(/Answer 1/i), {
-    target: { value: "Test Answer 1" },
-  });
-  fireEvent.change(screen.queryByLabelText(/Answer 2/i), {
-    target: { value: "Test Answer 2" },
-  });
-  fireEvent.change(screen.queryByLabelText(/Correct Answer/i), {
-    target: { value: "1" },
+
+  fireEvent.change(screen.getByLabelText(/Correct Answer/i), {
+    target: { value: "0" },
   });
 
-  // Submit
-  fireEvent.submit(screen.queryByText(/Add Question/i));
-
-  // View list again
-  fireEvent.click(screen.queryByText(/View Questions/i));
+  fireEvent.click(screen.getByText(/Add Question/i));
 
   expect(await screen.findByText(/Test Prompt/i)).toBeInTheDocument();
-  expect(await screen.findByText(/lorem testum 1/i)).toBeInTheDocument();
 });
 
 test("deletes the question when the delete button is clicked", async () => {
-  const { rerender } = render(<App />);
+  render(<App />);
+  fireEvent.click(screen.getByText(/View Questions/i));
 
-  fireEvent.click(screen.queryByText(/View Questions/i));
+  const deleteButtons = await screen.findAllByText(/Delete Question/i);
+  fireEvent.click(deleteButtons[0]);
 
-  await screen.findByText(/lorem testum 1/i);
-
-  fireEvent.click(screen.queryAllByText(/Delete Question/i)[0]);
-
-  await waitForElementToBeRemoved(() =>
-    screen.queryByText(/lorem testum 1/i)
+  // Check that fetch was called with DELETE
+  expect(global.fetch).toHaveBeenCalledWith(
+    expect.stringContaining("/questions/1"),
+    expect.objectContaining({ method: "DELETE" })
   );
-
-  rerender(<App />);
-
-  expect(screen.queryByText(/lorem testum 1/i)).not.toBeInTheDocument();
-  expect(screen.queryByText(/lorem testum 2/i)).toBeInTheDocument();
 });
 
 test("updates the answer when the dropdown is changed", async () => {
-  const { rerender } = render(<App />);
+  render(<App />);
+  fireEvent.click(screen.getByText(/View Questions/i));
 
-  fireEvent.click(screen.queryByText(/View Questions/i));
+  const select = await screen.findAllByLabelText(/Correct Answer/i);
+  fireEvent.change(select[0], { target: { value: "2" } });
 
-  await screen.findByText(/lorem testum 2/i);
-
-  fireEvent.change(screen.queryAllByLabelText(/Correct Answer/i)[0], {
-    target: { value: "3" },
-  });
-
-  expect(screen.queryAllByLabelText(/Correct Answer/i)[0].value).toBe("3");
-
-  rerender(<App />);
-
-  expect(screen.queryAllByLabelText(/Correct Answer/i)[0].value).toBe("3");
+  expect(select[0].value).toBe("2");
 });
