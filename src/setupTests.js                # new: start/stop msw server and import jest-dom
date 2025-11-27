@@ -1,0 +1,12 @@
+import '@testing-library/jest-dom';
+import 'whatwg-fetch';
+import { server } from './mocks/server'; // <-- Import the server from mocks/server.js
+
+// Start MSW before all tests
+beforeAll(() => server.listen());
+
+// Reset handlers between tests
+afterEach(() => server.resetHandlers());
+
+// Close the server after all tests
+afterAll(() => server.close());
