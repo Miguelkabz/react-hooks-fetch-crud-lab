@@ -4,7 +4,7 @@ function App() {
   const [questions, setQuestions] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [newPrompt, setNewPrompt] = useState("");
-  const [newAnswer, setNewAnswer] = useState("0");
+  const [newCorrectAnswer, setNewCorrectAnswer] = useState("0");
 
   // Fetch existing questions on mount
   useEffect(() => {
@@ -22,7 +22,7 @@ function App() {
 
   // Add a new question
   const addQuestion = async () => {
-    const payload = { prompt: newPrompt, answer: newAnswer };
+    const payload = { prompt: newPrompt, answers: ["A", "B", "C", "D"], correctAnswer: parseInt(newCorrectAnswer) };
     try {
       const res = await fetch("http://localhost:3001/questions", {
         method: "POST",
@@ -34,7 +34,7 @@ function App() {
       setQuestions((prev) => [...prev, data]);
       setShowForm(false);
       setNewPrompt("");
-      setNewAnswer("0");
+      setNewCorrectAnswer("0");
     } catch (error) {
       console.error(error);
     }
@@ -53,7 +53,7 @@ function App() {
   // Update answer
   const updateAnswer = (id, value) => {
     setQuestions((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, answer: value } : q))
+      prev.map((q) => (q.id === id ? { ...q, correctAnswer: parseInt(value) } : q))
     );
   };
 
@@ -78,8 +78,8 @@ function App() {
           <label>
             Correct Answer
             <select
-              value={newAnswer}
-              onChange={(e) => setNewAnswer(e.target.value)}
+              value={newCorrectAnswer}
+              onChange={(e) => setNewCorrectAnswer(e.target.value)}
               aria-label="Correct Answer"
             >
               <option value="0">A</option>
@@ -99,7 +99,7 @@ function App() {
               <label>
                 Correct Answer
                 <select
-                  value={q.answer}
+                  value={q.correctAnswer}
                   onChange={(e) => updateAnswer(q.id, e.target.value)}
                   aria-label="Correct Answer"
                 >
